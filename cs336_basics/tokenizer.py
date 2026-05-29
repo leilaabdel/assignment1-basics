@@ -18,6 +18,7 @@ class Tokenizer:
     def __init__(self, vocab: dict[int: bytes], merges, special_tokens=None):
         self.vocab = vocab
         self.merges = merges
+        self.merges_dict = {merge : i for i, merge in enumerate(self.merges)}
         self.special_tokens = sorted(special_tokens, key=len, reverse=True) if special_tokens is not None else []
         self.bytes_to_id = {token_bytes: token_id for token_id, token_bytes in self.vocab.items()}
 
@@ -62,12 +63,50 @@ class Tokenizer:
             for pretoken in pretokens:
                 encoded_bytes = pretoken.encode('utf-8')
                 atoms = [bytes([b]) for b in encoded_bytes]
-                atoms = self.apply_merges(atoms, self.merges)
+                # atoms = self.apply_merges_slow(atoms, self.merges)
+
+                atoms = self.apply_merges_fast(atoms, self.merges_dict)
                 ids.extend([self.bytes_to_id[a] for a in atoms])
         return ids
 
-    def apply_merges(self, atoms: list[bytes], merges: list[tuple]):
-        
+    def apply_merges_fast(self, atoms: list[bytes], merges: dict[tuple : int]):
+
+        while True: 
+            pair_counter = 0
+            possible_pairs = []
+            while pair_counter < len(atoms) - 1:
+                possible_pairs.append((atoms[pair_counter], atoms[pair_counter + 1]))
+                pair_counter += 1
+
+            possible_merges = {}
+            for pair in possible_pairs: 
+                if pair in merges.keys():
+                    possible_merges[pair] = merges[pair]
+
+            # Get the best possible merge
+
+            if len(possible_merges) == 0:
+                return atoms
+
+            best_merge = min(possible_merges, key=possible_merges.get)
+
+            if best_merge is None: 
+                return atoms
+
+            new_atoms = []
+
+            i = 0
+            while i < len(atoms):
+                if i < len(atoms) - 1 and best_merge[0] == atoms[i] and best_merge[1] == atoms[i + 1]:
+                    new_atoms.append(atoms[i] + atoms[i + 1])
+                    i += 2
+                else:
+                    new_atoms.append(atoms[i])
+                    i += 1
+            atoms = new_atoms
+
+
+    def apply_merges_slow(self, atoms: list[bytes], merges: list[tuple]):
         for merge in merges:
             new_atoms = []
             i = 0
@@ -83,7 +122,11 @@ class Tokenizer:
         return atoms
 
     def encode_iterable(self, iterable: Iterable[str]) -> Iterator[int]:
-        pass
+        for line in iterable:
+            for id in self.encode(line):
+                yield id
+
+
 
     def decode(self, ids: list[int]) -> str:
         final_bytes = bytearray()
