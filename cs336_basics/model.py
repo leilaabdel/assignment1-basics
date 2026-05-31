@@ -1,5 +1,5 @@
 import torch
-from einops import einsum
+from einops import einsum, reduce, rearrange
 
 class Linear(torch.nn.Module):
 
@@ -30,6 +30,35 @@ class Embedding(torch.nn.Module):
         one_hot_tokens = torch.nn.functional.one_hot(token_ids, num_classes=self.num_embeddings).float()
         y_hat = einsum(one_hot_tokens, self.weight, '... vocab_size, vocab_size d_model -> ... d_model')
         return y_hat
+
+class RMSNorm(torch.nn.Module):
+    def __init__(self, d_model: int, eps: float = 1e-5, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.eps = eps
+        self.device = device
+        self.dtype= dtype
+        self.weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, dtype=self.dtype, device=self.device)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        in_dtype = x.dtype
+        x = x.to(torch.float32)
+
+        x_squared = torch.square(x)
+        x_squared_mean = reduce(x_squared, ' ... d_model -> ... 1', 'mean')
+        x_squared_mean_plus_eps = x_squared_mean + self.eps
+        x_rms = torch.sqrt(x_squared_mean_plus_eps) #now is shape ... 1
+        
+        rms = x / x_rms
+        
+        rms_times_gain = einsum(rms, self.weight, '... d_model , d_model -> ... d_model')
+
+
+        return rms_times_gain.to(in_dtype)
+
+
+
+
 
 
 
