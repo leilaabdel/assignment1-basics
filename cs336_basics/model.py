@@ -56,6 +56,37 @@ class RMSNorm(torch.nn.Module):
 
         return rms_times_gain.to(in_dtype)
 
+class SwiGLU(torch.nn.Module):
+    def __init__(self, d_model: int, d_ff: int, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.d_ff = d_ff
+        self.dtype = dtype
+        self.device = device
+        self.w1_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_ff, d_model, dtype=self.dtype, device=self.device)))
+        self.w2_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_ff, dtype=self.dtype, device=self.device)))
+        self.w3_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_ff, d_model, dtype=self.dtype, device=self.device)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+        w1_x = einsum(self.w1_weight, x, 'd_ff d_model, ... d_model ->  ... d_ff')
+
+        # Gate branch
+        sigmoid_w1_x = torch.sigmoid(w1_x)
+        w1_x_sigmoid_w1_x = einsum(w1_x, sigmoid_w1_x, '... d_ff , ... d_ff -> ... d_ff')
+
+        # Value branch
+        w3_x = einsum(self.w3_weight, x, 'd_ff d_model, ... d_model -> ... d_ff')
+
+        point_wise_apply_gate = einsum(w1_x_sigmoid_w1_x, w3_x, '... d_ff, ... d_ff -> ... d_ff')
+
+        down_project = einsum(self.w2_weight, point_wise_apply_gate, 'd_model d_ff, ... d_ff -> ... d_model')
+        
+        return down_project
+
+
+
+
+
 
 
 
