@@ -83,6 +83,51 @@ class SwiGLU(torch.nn.Module):
         
         return down_project
 
+class RotaryPositionalEmbedding(torch.nn.Module):
+    def __init__(self, theta: float, d_k: int, max_seq_len: int, device: torch.device | None = None):
+        super().__init__()
+        self.theta_base = theta
+        self.d_k = d_k
+        self.num_pairs = int(d_k / 2)
+        self.max_seq_len = max_seq_len # length of M
+        self.device = device
+        
+        positions = torch.arange(self.max_seq_len)
+        thetas_index = torch.arange(self.num_pairs) 
+        
+        exponents = -2 / self.d_k * thetas_index
+        thetas = self.theta_base ** exponents
+
+        angles = einsum(positions, thetas, 'max_sequence_length, num_pairs -> max_sequence_length num_pairs')
+
+        cos_table = torch.cos(angles)
+        sin_table = torch.sin(angles)
+
+        self.register_buffer('cos_table', cos_table)
+        self.register_buffer('sin_table', sin_table)
+
+
+    def forward(self, x: torch.Tensor, token_positions: torch.Tensor) -> torch.Tensor:
+        x_reshaped = rearrange(x, '... sequence_length (num_pairs pair_components) -> ... sequence_length num_pairs pair_components', num_pairs=self.num_pairs, pair_components=2)
+        x_even = x_reshaped[..., 0]
+        x_odd = x_reshaped[..., 1]
+
+        cos_selected = self.cos_table[token_positions]
+        sin_selected = self.sin_table[token_positions]
+
+        out_even = x_even * cos_selected - x_odd * sin_selected
+        out_odd = x_even * sin_selected + x_odd * cos_selected
+        out_interleaved = rearrange(torch.stack([out_even, out_odd], dim= -1 ), '... sequence_length num_pairs pair_components -> ... sequence_length (num_pairs pair_components)')
+        return out_interleaved
+
+
+
+        
+
+
+    
+
+
 
 
 
