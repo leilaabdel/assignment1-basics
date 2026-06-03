@@ -120,6 +120,17 @@ class RotaryPositionalEmbedding(torch.nn.Module):
         out_interleaved = rearrange(torch.stack([out_even, out_odd], dim= -1 ), '... sequence_length num_pairs pair_components -> ... sequence_length (num_pairs pair_components)')
         return out_interleaved
 
+def softmax(in_features: torch.Tensor, dim: int) -> torch.Tensor:
+    values, indices = torch.max(in_features, dim=dim, keepdim=True)
+    subtracted_features = in_features - values
+
+    exp_term = torch.exp(subtracted_features)
+    sum_exp = torch.sum(exp_term, dim=dim, keepdim=True)
+
+    soft_max = exp_term / sum_exp
+    
+    return soft_max
+
 
 
         
