@@ -142,10 +142,59 @@ def scaled_dot_product_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tens
     if mask is not None:
        scaled_q_k_transpose = scaled_q_k_transpose.masked_fill(~mask, -float("inf"))
 
+    print("scaled_q_k_transpose stats:")
+    print("  min:", scaled_q_k_transpose.min().item())
+    print("  max:", scaled_q_k_transpose.max().item())
+    print("  any inf:", torch.isinf(scaled_q_k_transpose).any().item())
+    print("  any nan:", torch.isnan(scaled_q_k_transpose).any().item())
+    print("  any all-(-inf) rows:", (scaled_q_k_transpose == -float('inf')).all(dim=-1).any().item())
+
     softmax_q_k_transpose = softmax(scaled_q_k_transpose, -1)
     attention = einsum(softmax_q_k_transpose, V, '... queries keys, ... keys d_v -> ... queries d_v')
 
     return attention
+
+class MultiheadSelfAttention(torch.nn.Module):
+    
+    def __init__(self, d_model: int, num_heads: int, theta: int | None=None, device=None, dtype=None):
+        super().__init__()
+        self.d_model = d_model
+        self.num_heads = num_heads
+        self.device = device
+        self.dtype = dtype
+        self.d_k = self.d_v = int(d_model / num_heads)
+        self.theta = theta
+        self.q_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
+        self.k_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
+        self.v_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
+        self.o_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
+
+    def forward(self, x: torch.Tensor) -> torch.Tensor:
+
+        #Torch convention is to have preserved access first D_out first and d_in on the inside
+        
+        Q = einsum(self.q_proj_weight, x, 'd_out d_in, ... sequence_length d_in  -> ... sequence_length d_out')
+        K = einsum(self.k_proj_weight, x, 'd_out d_in, ... sequence_length d_in -> ... sequence_length d_out')
+        V = einsum(self.v_proj_weight, x,'d_out d_in, ... sequence_length d_in -> ... sequence_length d_out')
+
+        Q_heads = rearrange(Q, '... sequence_length (h d_k) ->  ... h sequence_length d_k', d_k=self.d_k, h=self.num_heads) 
+        K_heads = rearrange(K, '... sequence_length (h d_k) -> ... h sequence_length d_k', d_k=self.d_k, h=self.num_heads)
+        V_heads = rearrange(V, '... sequence_length (h d_k) -> ... h sequence_length d_k', d_k=self.d_k, h=self.num_heads)
+        
+        #Note causal mask shape is shape seq_len * seq_len
+        causal_mask = torch.triu(torch.ones((x.shape[-2], x.shape[-2]), dtype=self.dtype, device=self.device), diagonal=1).bool()
+        print("Caual mask", ~causal_mask)
+        
+        attention_matrix = scaled_dot_product_attention(Q_heads, K_heads, V_heads, mask=~causal_mask) # ... h sequence_length queries d_v
+
+        attention_concat = rearrange(attention_matrix, '... h sequence_length d_v -> ... sequence_length (h d_v)')
+
+        weighted_attention = einsum(self.o_proj_weight, attention_concat, 'd_out d_in, ... sequence_length d_in -> ... sequence_length d_out')
+
+        return weighted_attention
+
+
+
 
 
 

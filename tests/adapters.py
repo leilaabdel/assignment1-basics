@@ -127,7 +127,7 @@ def run_multihead_self_attention(
     o_proj_weight: Float[Tensor, " d_model d_model"],
     in_features: Float[Tensor, " ... sequence_length d_model"],
 ) -> Float[Tensor, " ... sequence_length d_model"]:
-    """
+    """e
     Given the key, query, and value projection weights of a naive unbatched
     implementation of multi-head attention, return the output of an optimized batched
     implementation. This implementation should handle the key, query, and value projections
@@ -149,8 +149,17 @@ def run_multihead_self_attention(
         Float[Tensor, " ... sequence_length d_model"]: Tensor with the output of running your optimized, batched multi-headed attention
         implementation with the given QKV projection weights and input features.
     """
-    raise NotImplementedError
-
+    mha = MultiheadSelfAttention(d_model, num_heads)
+    mha.load_state_dict({
+        "q_proj_weight": q_proj_weight,
+        "k_proj_weight": k_proj_weight,
+        "v_proj_weight": v_proj_weight,
+        "o_proj_weight": o_proj_weight
+    })
+    result = mha.forward(in_features)
+    print("INPUT", in_features.shape)
+    print("RESULT", result.shape)
+    return result
 
 def run_multihead_self_attention_with_rope(
     d_model: int,
