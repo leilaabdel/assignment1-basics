@@ -156,7 +156,7 @@ def scaled_dot_product_attention(Q: torch.Tensor, K: torch.Tensor, V: torch.Tens
 
 class MultiheadSelfAttention(torch.nn.Module):
     
-    def __init__(self, d_model: int, num_heads: int, theta: int | None=None, device=None, dtype=None):
+    def __init__(self, d_model: int, num_heads: int, theta: int | None=None, token_positions: torch.Tensor | None = None, max_seq_len: int | None = None, device=None, dtype=None):
         super().__init__()
         self.d_model = d_model
         self.num_heads = num_heads
@@ -164,6 +164,8 @@ class MultiheadSelfAttention(torch.nn.Module):
         self.dtype = dtype
         self.d_k = self.d_v = int(d_model / num_heads)
         self.theta = theta
+        self.token_positions = token_positions
+        self.max_seq_len = max_seq_len
         self.q_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
         self.k_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
         self.v_proj_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_model, dtype=self.dtype, device=self.device)))
@@ -180,10 +182,14 @@ class MultiheadSelfAttention(torch.nn.Module):
         Q_heads = rearrange(Q, '... sequence_length (h d_k) ->  ... h sequence_length d_k', d_k=self.d_k, h=self.num_heads) 
         K_heads = rearrange(K, '... sequence_length (h d_k) -> ... h sequence_length d_k', d_k=self.d_k, h=self.num_heads)
         V_heads = rearrange(V, '... sequence_length (h d_k) -> ... h sequence_length d_k', d_k=self.d_k, h=self.num_heads)
+
+        if self.theta is not None:
+            rope_module = RotaryPositionalEmbedding(self.theta, self.d_k, self.max_seq_len)
+            Q_heads = rope_module.forward(Q_heads, self.token_positions)
+            K_heads = rope_module.forward(K_heads, self.token_positions)
         
         #Note causal mask shape is shape seq_len * seq_len
         causal_mask = torch.triu(torch.ones((x.shape[-2], x.shape[-2]), dtype=self.dtype, device=self.device), diagonal=1).bool()
-        print("Caual mask", ~causal_mask)
         
         attention_matrix = scaled_dot_product_attention(Q_heads, K_heads, V_heads, mask=~causal_mask) # ... h sequence_length queries d_v
 
