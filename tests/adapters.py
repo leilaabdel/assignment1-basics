@@ -93,7 +93,7 @@ def run_swiglu(
     # swiglu.w3.weight.data = w3_weight
     
     swiglu = SwiGLU(d_model, d_ff)
-    swiglu.load_state_dict({"w1_weight": w1_weight, "w2_weight" : w2_weight, "w3_weight" : w3_weight})
+    swiglu.load_state_dict({"w1.weight": w1_weight, "w2.weight" : w2_weight, "w3.weight" : w3_weight})
     return swiglu.forward(in_features)
 
 
@@ -151,10 +151,10 @@ def run_multihead_self_attention(
     """
     mha = MultiheadSelfAttention(d_model, num_heads)
     mha.load_state_dict({
-        "q_proj_weight": q_proj_weight,
-        "k_proj_weight": k_proj_weight,
-        "v_proj_weight": v_proj_weight,
-        "o_proj_weight": o_proj_weight
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight
     })
     result = mha.forward(in_features)
     return result
@@ -198,10 +198,10 @@ def run_multihead_self_attention_with_rope(
     """
     mha = MultiheadSelfAttention(d_model, num_heads, theta, token_positions, max_seq_len)
     mha.load_state_dict({
-        "q_proj_weight": q_proj_weight,
-        "k_proj_weight": k_proj_weight,
-        "v_proj_weight": v_proj_weight,
-        "o_proj_weight": o_proj_weight
+        "q_proj.weight": q_proj_weight,
+        "k_proj.weight": k_proj_weight,
+        "v_proj.weight": v_proj_weight,
+        "output_proj.weight": o_proj_weight
     })
     result = mha.forward(in_features)
     return result
@@ -242,7 +242,7 @@ def run_transformer_block(
 ) -> Float[Tensor, " batch sequence_length d_model"]:
     """
     Given the weights of a pre-norm Transformer block and input features,
-    return the output of running the Transformer block on the input features.
+    return the output of running the Transformer block on the .input features.
 
     This function should use RoPE.
     Depending on your implementation, you may simply need to pass the relevant args
@@ -301,8 +301,10 @@ def run_transformer_block(
         Float[Tensor, "batch sequence_length d_model"] Tensor with the output of
         running the Transformer block on the input features while using RoPE.
     """
-    raise NotImplementedError
-
+    transformer_block = TransformerBlock(d_model, num_heads, d_ff, max_seq_len, theta)
+    transformer_block.load_state_dict(weights)
+    return transformer_block.forward(in_features)
+    
 
 def run_transformer_lm(
     vocab_size: int,
