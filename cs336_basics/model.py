@@ -63,10 +63,6 @@ class SwiGLU(torch.nn.Module):
         self.d_ff = d_ff
         self.dtype = dtype
         self.device = device
-        # self.w1_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_ff, d_model, dtype=self.dtype, device=self.device)))
-        # self.w2_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_model, d_ff, dtype=self.dtype, device=self.device)))
-        # self.w3_weight = torch.nn.Parameter(torch.nn.init.trunc_normal_(torch.empty(d_ff, d_model, dtype=self.dtype, device=self.device)))
-
         self.w1 = Linear(d_model, d_ff, self.dtype, self.device)
         self.w2 = Linear(d_ff, d_model, self.dtype, self.device)
         self.w3 = Linear(d_model, d_ff, self.dtype, self.device)
